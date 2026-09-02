@@ -67,65 +67,11 @@ $$\delta > \frac{N}{N-1}\,\epsilon.$$
 
 ## Interactive explorer
 
-An interactive version (tune N, epsilon, delta) lives in [jumpy-forecasts.html](jumpy-forecasts.html).
-The `<iframe>` below renders it in a real browser or when this file is exported/served as HTML;
-in GitHub or the VS Code Markdown preview the script is sanitized, so use the link above instead.
+An interactive version (tune N, epsilon, delta) lives in [jumpy-forecasts.html](https://dietervdb-meteo.github.io/notes/jumpy-forecasts.html),
+served via GitHub Pages. In the GitHub or VS Code Markdown preview the embedded script is
+sanitized, so follow that link to open the live explorer in a real browser.
 
-<iframe src="jumpy-forecasts.html" width="100%" height="520" style="border:1px solid #2a3150; border-radius:12px;" title="Jumpy forecasts error growth explorer"></iframe>
-
-### Vega-Lite version (for HedgeDoc)
-
-HedgeDoc renders Vega-Lite inside a fenced ` ```vega-lite ` block (via vega-embed), and the slider *bindings* below stay interactive — so this works inline, with no external file or `<script>`. In the VS Code preview it just shows as a code block; paste it into a HedgeDoc note to get the live sliders. (If your instance only knows the ` ```vega ` keyword, rename the fence — vega-embed detects Vega-Lite from `$schema`.)
-
-```vega-lite
-{
-  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-  "description": "Error growth: prognostic vs diagnostic in a multi-out rollout.",
-  "width": 640,
-  "height": 360,
-  "params": [
-    {"name": "N",   "value": 2,   "bind": {"input": "range", "min": 1, "max": 12, "step": 1,    "name": "N (multi-out steps): "}},
-    {"name": "eps", "value": 0.1, "bind": {"input": "range", "min": 0, "max": 1,  "step": 0.01, "name": "epsilon (per-step error): "}},
-    {"name": "del", "value": 0.4, "bind": {"input": "range", "min": 0, "max": 1,  "step": 0.01, "name": "delta (diagnostic error): "}}
-  ],
-  "layer": [
-    {
-      "data": {"sequence": {"start": 1, "stop": 49, "step": 1, "as": "tb"}},
-      "transform": [{"filter": "(datum.tb % N) == 0"}],
-      "mark": {"type": "rule", "strokeDash": [4, 4], "color": "#9aa3c0", "opacity": 0.5},
-      "encoding": {"x": {"field": "tb", "type": "quantitative"}}
-    },
-    {
-      "data": {"sequence": {"start": 1, "stop": 49, "step": 1, "as": "t"}},
-      "transform": [
-        {"calculate": "floor((datum.t - 1) / N) + 1", "as": "R"},
-        {"calculate": "((datum.t - 1) % N) + 1", "as": "s"},
-        {"calculate": "datum.t * eps", "as": "dphi"},
-        {"calculate": "(datum.R - 1) * N * eps + datum.s * del", "as": "dchi"},
-        {"fold": ["dphi", "dchi"], "as": ["series", "error"]}
-      ],
-      "mark": {"type": "line", "point": true},
-      "encoding": {
-        "x": {"field": "t", "type": "quantitative", "title": "t"},
-        "y": {"field": "error", "type": "quantitative", "title": "cumulative error"},
-        "color": {
-          "field": "series", "type": "nominal", "title": null,
-          "scale": {"domain": ["dphi", "dchi"], "range": ["#4c78a8", "#f58518"]},
-          "legend": {"labelExpr": "datum.label == 'dphi' ? 'Delta_phi (prognostic)' : 'Delta_chi (diagnostic)'"}
-        },
-        "tooltip": [
-          {"field": "t", "type": "quantitative"},
-          {"field": "series", "type": "nominal"},
-          {"field": "error", "type": "quantitative", "format": ".3f"}
-        ]
-      }
-    }
-  ]
-}
-```
-
----
-
+<!--
 ## Appendix — a more non-trivial example (to be reintegrated later)
 
 A variable with growth dynamics:
@@ -148,3 +94,4 @@ e.g.
      ETC
    ETC
 ```
+-->
