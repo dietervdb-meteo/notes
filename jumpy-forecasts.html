@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jumpy forecasts — error growth explorer</title>
+<style>
+  :root {
+    --bg: #0f1220;
+    --panel: #1a1f35;
+    --ink: #e7eaf3;
+    --muted: #9aa3c0;
+    --phi: #4ea1ff;
+    --chi: #ff7a59;
+    --grid: #2a3150;
+    --accent: #7c5cff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    padding: 24px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.sub { margin: 0 0 20px; color: var(--muted); font-size: 14px; }
+  .layout { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+  .controls {
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 18px 20px;
+    width: 300px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.3);
+  }
+  .plotwrap {
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.3);
+    flex: 1 1 480px;
+    min-width: 360px;
+  }
+  .ctrl { margin-bottom: 18px; }
+  .ctrl label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+  .ctrl label .val { color: var(--accent); font-variant-numeric: tabular-nums; font-weight: 600; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .legend { display: flex; gap: 18px; font-size: 13px; margin: 4px 0 12px 6px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+  canvas { width: 100%; height: auto; display: block; }
+  .note {
+    margin-top: 14px; font-size: 12.5px; color: var(--muted); line-height: 1.5;
+    border-top: 1px solid var(--grid); padding-top: 12px;
+  }
+  code { color: var(--ink); background: #262c47; padding: 1px 5px; border-radius: 5px; }
+  .verdict { font-weight: 600; }
+  .verdict.jumpy { color: var(--chi); }
+  .verdict.smooth { color: var(--phi); }
+</style>
+</head>
+<body>
+  <h1>Jumpy forecasts — error growth explorer</h1>
+  <p class="sub">
+    Prognostic error &Delta;<sub>&phi;</sub>(t) = t&epsilon; vs diagnostic error
+    &Delta;<sub>&chi;</sub>((R&minus;1)N+s) = (R&minus;1)N&epsilon; + s&delta;.
+    The diagnostic gets &quot;jumpy&quot; at rollout boundaries when &delta; &gt; N/(N&minus;1)&nbsp;&epsilon;.
+  </p>
+
+  <div class="layout">
+    <div class="controls">
+      <div class="ctrl">
+        <label>N (multi-out steps) <span class="val" id="Nval">2</span></label>
+        <input type="range" id="N" min="1" max="12" step="1" value="2">
+      </div>
+      <div class="ctrl">
+        <label>&epsilon; (per-step error) <span class="val" id="epsval">0.10</span></label>
+        <input type="range" id="eps" min="0" max="1" step="0.01" value="0.10">
+      </div>
+      <div class="ctrl">
+        <label>&delta; (diagnostic error) <span class="val" id="delval">0.40</span></label>
+        <input type="range" id="del" min="0" max="1" step="0.01" value="0.40">
+      </div>
+      <div class="ctrl">
+        <label>t<sub>max</sub> <span class="val" id="tmaxval">24</span></label>
+        <input type="range" id="tmax" min="4" max="80" step="1" value="24">
+      </div>
+      <div class="note" id="verdict"></div>
+    </div>
+
+    <div class="plotwrap">
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--phi)"></i> &Delta;<sub>&phi;</sub> (prognostic)</span>
+        <span><i class="swatch" style="background:var(--chi)"></i> &Delta;<sub>&chi;</sub> (diagnostic)</span>
+        <span><i class="swatch" style="background:var(--grid);height:10px;width:2px"></i> rollout boundary</span>
+      </div>
+      <canvas id="plot" width="720" height="440"></canvas>
+    </div>
+  </div>
+
+<script>
+const els = {
+  N: document.getElementById('N'),
+  eps: document.getElementById('eps'),
+  del: document.getElementById('del'),
+  tmax: document.getElementById('tmax'),
+  Nval: document.getElementById('Nval'),
+  epsval: document.getElementById('epsval'),
+  delval: document.getElementById('delval'),
+  tmaxval: document.getElementById('tmaxval'),
+  verdict: document.getElementById('verdict'),
+};
+const canvas = document.getElementById('plot');
+const ctx = canvas.getContext('2d');
+
+// Split t = (R-1)N + s with 1 <= s <= N (via remainder theorem on t-1).
+function split(t, N) {
+  const R = Math.floor((t - 1) / N) + 1;
+  const s = ((t - 1) % N) + 1;
+  return { R, s };
+}
+function deltaPhi(t, eps) { return t * eps; }
+function deltaChi(t, N, eps, del) {
+  const { R, s } = split(t, N);
+  return (R - 1) * N * eps + s * del;
+}
+
+function compute() {
+  const N = +els.N.value;
+  const eps = +els.eps.value;
+  const del = +els.del.value;
+  const tmax = +els.tmax.value;
+
+  const phi = [], chi = [];
+  for (let t = 1; t <= tmax; t++) {
+    phi.push({ t, y: deltaPhi(t, eps) });
+    chi.push({ t, y: deltaChi(t, N, eps, del) });
+  }
+  return { N, eps, del, tmax, phi, chi };
+}
+
+function draw() {
+  const { N, eps, del, tmax, phi, chi } = compute();
+  const W = canvas.width, H = canvas.height;
+  const pad = { l: 52, r: 16, t: 16, b: 40 };
+  ctx.clearRect(0, 0, W, H);
+
+  const maxY = Math.max(
+    1e-9,
+    phi[phi.length - 1].y,
+    ...chi.map(p => p.y)
+  );
+  const x = t => pad.l + (t - 1) / Math.max(1, tmax - 1) * (W - pad.l - pad.r);
+  const y = v => H - pad.b - v / maxY * (H - pad.t - pad.b);
+
+  // grid + y ticks
+  ctx.strokeStyle = '#2a3150';
+  ctx.fillStyle = '#9aa3c0';
+  ctx.font = '11px system-ui';
+  ctx.lineWidth = 1;
+  const yticks = 5;
+  for (let i = 0; i <= yticks; i++) {
+    const v = maxY * i / yticks;
+    const yy = y(v);
+    ctx.beginPath(); ctx.moveTo(pad.l, yy); ctx.lineTo(W - pad.r, yy); ctx.stroke();
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillText(v.toFixed(2), pad.l - 8, yy);
+  }
+
+  // rollout boundaries (vertical lines at t = k*N)
+  ctx.strokeStyle = '#3a4370';
+  ctx.setLineDash([4, 4]);
+  for (let k = 1; k * N <= tmax; k++) {
+    const xx = x(k * N + 0.5);
+    if (xx > W - pad.r) continue;
+    ctx.beginPath(); ctx.moveTo(xx, pad.t); ctx.lineTo(xx, H - pad.b); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // x ticks
+  ctx.fillStyle = '#9aa3c0';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  const step = Math.ceil(tmax / 12);
+  for (let t = 1; t <= tmax; t += step) {
+    ctx.fillText(t, x(t), H - pad.b + 6);
+  }
+  ctx.fillText('t', (W + pad.l) / 2, H - 14);
+
+  function series(data, color) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    data.forEach((p, i) => {
+      const px = x(p.t), py = y(p.y);
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    });
+    ctx.stroke();
+    ctx.fillStyle = color;
+    data.forEach(p => {
+      ctx.beginPath(); ctx.arc(x(p.t), y(p.y), 2.5, 0, 2 * Math.PI); ctx.fill();
+    });
+  }
+  series(phi, getComputedStyle(document.documentElement).getPropertyValue('--phi').trim());
+  series(chi, getComputedStyle(document.documentElement).getPropertyValue('--chi').trim());
+
+  // verdict
+  const threshold = N > 1 ? (N / (N - 1)) * eps : Infinity;
+  const jumpy = N > 1 && del > threshold;
+  const thrTxt = N > 1 ? threshold.toFixed(3) : '∞ (N=1: no boundaries)';
+  els.verdict.innerHTML =
+    `Boundary jump when <code>&delta; &gt; N/(N&minus;1)&nbsp;&epsilon; = ${thrTxt}</code>.<br>` +
+    `Current &delta; = ${del.toFixed(2)} &rarr; ` +
+    (jumpy
+      ? `<span class="verdict jumpy">&Delta;<sub>&chi;</sub> is jumpy (drops at each rollout boundary).</span>`
+      : `<span class="verdict smooth">&Delta;<sub>&chi;</sub> stays monotonic.</span>`);
+}
+
+function sync() {
+  els.Nval.textContent = els.N.value;
+  els.epsval.textContent = (+els.eps.value).toFixed(2);
+  els.delval.textContent = (+els.del.value).toFixed(2);
+  els.tmaxval.textContent = els.tmax.value;
+  draw();
+}
+
+['N', 'eps', 'del', 'tmax'].forEach(k => els[k].addEventListener('input', sync));
+sync();
+</script>
+</body>
+</html>
