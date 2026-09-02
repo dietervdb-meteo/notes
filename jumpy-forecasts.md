@@ -67,9 +67,7 @@ $$\delta > \frac{N}{N-1}\,\epsilon.$$
 
 ## Interactive explorer
 
-An interactive version (tune N, epsilon, delta) lives in [jumpy-forecasts.html](https://dietervdb-meteo.github.io/notes/jumpy-forecasts.html),
-served via GitHub Pages. In the GitHub or VS Code Markdown preview the embedded script is
-sanitized, so follow that link to open the live explorer in a real browser.
+The above is interactively visualized (tune N, epsilon, delta) at [jumpy-forecasts.html](https://dietervdb-meteo.github.io/notes/jumpy-forecasts.html).
 
 <!--
 ## Appendix — a more non-trivial example (to be reintegrated later)
